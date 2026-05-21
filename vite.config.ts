@@ -3,7 +3,7 @@ import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
   plugins: [vue()],
-  base: './',
+  base: '/4d-pm/',
   server: {
     port: 3000,
     open: true

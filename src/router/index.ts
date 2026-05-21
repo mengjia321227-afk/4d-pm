@@ -1,29 +1,23 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
-import DashboardView from '../views/DashboardView.vue'
+import ProjectManagementView from '../views/ProjectManagementView.vue'
+import DemandManagementView from '../views/DemandManagementView.vue'
 
 const router = createRouter({
   history: createWebHashHistory(),
   routes: [
     {
       path: '/',
-      redirect: '/dashboard/overseas'
+      redirect: '/projects'
     },
     {
-      path: '/dashboard/:dimension',
-      name: 'Dashboard',
-      component: DashboardView,
-      props: true
-    },
-    {
-      path: '/gantt/:dimension',
-      name: 'Gantt',
-      component: () => import('../views/GanttView.vue'),
-      props: true
+      path: '/projects',
+      name: 'Projects',
+      component: ProjectManagementView
     },
     {
       path: '/demands',
       name: 'Demands',
-      component: () => import('../views/DemandPoolView.vue')
+      component: DemandManagementView
     }
   ]
 })

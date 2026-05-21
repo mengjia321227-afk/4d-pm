@@ -1,49 +1,22 @@
 <template>
   <aside class="sidebar">
     <div class="logo">
-      <span class="logo-icon">📊</span>
-      <span class="logo-text">4D-PM</span>
+      <span class="logo-text">项目&需求管理</span>
     </div>
     
     <nav class="nav-menu">
-      <div class="nav-section">
-        <div class="nav-title">项目维度</div>
-        <router-link
-          v-for="dim in store.dimensions"
-          :key="dim.key"
-          :to="`/dashboard/${dim.key}`"
-          class="nav-item"
-          :class="{ active: route.params.dimension === dim.key && route.name === 'Dashboard' }"
-        >
-          <span class="nav-icon">{{ dim.icon }}</span>
-          <span>{{ dim.label }}</span>
-        </router-link>
-      </div>
+      <router-link to="/projects" class="nav-item" :class="{ active: route.name === 'Projects' }">
+        项目管理
+      </router-link>
       
-      <div class="nav-section">
-        <div class="nav-title">视图</div>
-        <router-link
-          v-for="dim in store.dimensions"
-          :key="`gantt-${dim.key}`"
-          :to="`/gantt/${dim.key}`"
-          class="nav-item sub-item"
-          :class="{ active: route.params.dimension === dim.key && route.name === 'Gantt' }"
-        >
-          <span>{{ dim.label }}甘特图</span>
-        </router-link>
-      </div>
-      
-      <div class="nav-section">
-        <router-link to="/demands" class="nav-item" :class="{ active: route.name === 'Demands' }">
-          <span class="nav-icon">📝</span>
-          <span>需求池</span>
-          <span v-if="pendingDemands > 0" class="badge">{{ pendingDemands }}</span>
-        </router-link>
-      </div>
+      <router-link to="/demands" class="nav-item" :class="{ active: route.name === 'Demands' }">
+        需求管理
+        <span v-if="pendingDemands > 0" class="badge">{{ pendingDemands }}</span>
+      </router-link>
     </nav>
     
     <div class="sidebar-footer">
-      <button class="export-btn" @click="exportData">💾 导出数据</button>
+      <button class="export-btn" @click="exportData">导出数据</button>
     </div>
   </aside>
 </template>
@@ -81,53 +54,34 @@ const exportData = () => {
 }
 
 .logo {
-  padding: 20px 16px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  padding: 24px 20px;
   border-bottom: 1px solid rgba(255,255,255,0.1);
 }
 
-.logo-icon {
-  font-size: 24px;
-}
-
 .logo-text {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
   letter-spacing: 1px;
 }
 
 .nav-menu {
   flex: 1;
-  padding: 16px 12px;
-  overflow-y: auto;
-}
-
-.nav-section {
-  margin-bottom: 24px;
-}
-
-.nav-title {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: rgba(255,255,255,0.4);
-  margin-bottom: 8px;
-  padding-left: 12px;
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  justify-content: space-between;
+  padding: 14px 16px;
   border-radius: 8px;
   color: rgba(255,255,255,0.7);
   text-decoration: none;
   transition: all 0.2s;
-  margin-bottom: 4px;
-  position: relative;
+  font-size: 15px;
 }
 
 .nav-item:hover {
@@ -140,17 +94,7 @@ const exportData = () => {
   color: #fff;
 }
 
-.nav-icon {
-  font-size: 18px;
-}
-
-.sub-item {
-  padding-left: 40px;
-  font-size: 14px;
-}
-
 .badge {
-  margin-left: auto;
   background: #F53C3C;
   color: #fff;
   font-size: 11px;
