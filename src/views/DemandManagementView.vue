@@ -196,7 +196,11 @@
         <!-- 图片上传 -->
         <div class="form-group">
           <label>需求截图</label>
-          <div class="image-upload-area">
+          <div 
+            class="image-upload-area"
+            tabindex="0"
+            @paste="handlePaste"
+          >
             <input 
               type="file" 
               accept="image/*" 
@@ -206,6 +210,7 @@
               style="display: none"
             >
             <button class="btn-text" @click="imageInput?.click()">+ 上传图片</button>
+            <span class="paste-hint">或在此区域按 Ctrl+V 粘贴</span>
           </div>
           <div v-if="uploadedImages.length > 0" class="uploaded-images">
             <div v-for="(img, idx) in uploadedImages" :key="idx" class="uploaded-image-item">
@@ -399,6 +404,19 @@ const filteredDemands = computed(() => {
   return result
 })
 
+// 读取图片文件为 base64
+const readImageFile = (file: File): Promise<string> => {
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      if (e.target?.result) {
+        resolve(e.target.result as string)
+      }
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
 // 图片上传处理
 const handleImageUpload = (event: Event) => {
   const target = event.target as HTMLInputElement
@@ -406,17 +424,40 @@ const handleImageUpload = (event: Event) => {
   if (!files) return
 
   Array.from(files).forEach(file => {
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      if (e.target?.result) {
-        uploadedImages.value.push(e.target.result as string)
-      }
-    }
-    reader.readAsDataURL(file)
+    readImageFile(file).then(dataUrl => {
+      uploadedImages.value.push(dataUrl)
+    })
   })
 
   // 清空 input 以便可以重复选择相同文件
   target.value = ''
+}
+
+// 粘贴图片处理
+const handlePaste = async (event: ClipboardEvent) => {
+  const items = event.clipboardData?.items
+  if (!items) return
+
+  const imageFiles: File[] = []
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]
+    if (item.type.startsWith('image/')) {
+      const file = item.getAsFile()
+      if (file) {
+        imageFiles.push(file)
+      }
+    }
+  }
+
+  if (imageFiles.length === 0) return
+
+  event.preventDefault()
+
+  for (const file of imageFiles) {
+    const dataUrl = await readImageFile(file)
+    uploadedImages.value.push(dataUrl)
+  }
 }
 
 const removeImage = (index: number) => {
@@ -920,6 +961,26 @@ const confirmLinkVersion = () => {
 /* 图片上传 */
 .image-upload-area {
   margin-bottom: 8px;
+  border: 2px dashed #d9d9d9;
+  border-radius: 8px;
+  padding: 20px;
+  text-align: center;
+  transition: all 0.2s;
+  cursor: pointer;
+  outline: none;
+}
+
+.image-upload-area:hover,
+.image-upload-area:focus {
+  border-color: #3b71ee;
+  background: #f0f7ff;
+}
+
+.paste-hint {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #8c8c8c;
 }
 
 .uploaded-images {
