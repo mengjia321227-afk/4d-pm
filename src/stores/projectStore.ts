@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { supabase } from '../lib/supabase'
 
 export interface Version {
   id: string
@@ -125,43 +126,91 @@ const defaultDemands: Demand[] = [
   { id: '4', title: '客户录入电话栏添加+86国内区号', description: '客户联系人信息录入时，电话字段需要支持+86国内区号。目前有客户在国内但做出海生意的情况，所有电话栏都需要添加+86选项，因为对接到了国内客户转海外的场景。', priority: 'P1', category: '海外平台', creator: '卜佳雯', createDate: '2026-05-21', remark: '截图中显示目前有SG +65、MY +60、TH +66、ID +62、PH +63、VN +84、MM +95、KH +855等区号，但缺少CN +86', images: [], projectId: null, versionId: null, scheduleStart: null, scheduleEnd: null, status: 'pending' }
 ]
 
-function loadFromStorage() {
+// 蛇形命名 -> 驼峰命名
+function fromSnakeCase(obj: any): any {
+  if (Array.isArray(obj)) {
+    return obj.map(fromSnakeCase)
+  }
+  if (obj && typeof obj === 'object') {
+    const result: any = {}
+    for (const key in obj) {
+      const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())
+      result[camelKey] = fromSnakeCase(obj[key])
+    }
+    return result
+  }
+  return obj
+}
+
+// 驼峰命名 -> 蛇形命名
+function toSnakeCase(obj: any): any {
+  if (Array.isArray(obj)) {
+    return obj.map(toSnakeCase)
+  }
+  if (obj && typeof obj === 'object') {
+    const result: any = {}
+    for (const key in obj) {
+      const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`)
+      result[snakeKey] = toSnakeCase(obj[key])
+    }
+    return result
+  }
+  return obj
+}
+
+async function loadFromSupabase() {
   try {
-    const data = localStorage.getItem(STORAGE_KEY)
-    if (data) {
-      const parsed = JSON.parse(data)
-      // 数据迁移：兼容旧数据
-      const migratedProjects = (parsed.projects || defaultProjects).map((p: any) => ({
-        ...p,
-        priority: p.priority || 'P1',
-        stakeholders: p.stakeholders || [],
-        developers: p.developers || []
-      }))
-      const migratedDemands = (parsed.demands || defaultDemands).map((d: any) => ({
-        ...d,
-        priority: d.priority === 'high' ? 'P0' : d.priority === 'medium' ? 'P1' : d.priority === 'low' ? 'P2' : d.priority || 'P1',
-        creator: d.creator || '未知',
-        images: d.images || [],
-        remark: d.remark || ''
-      }))
+    // 尝试从 Supabase 加载
+    const [{ data: projectsData }, { data: versionsData }, { data: demandsData }, { data: logsData }] = await Promise.all([
+      supabase.from('projects').select('*').order('id'),
+      supabase.from('versions').select('*').order('id'),
+      supabase.from('demands').select('*').order('id'),
+      supabase.from('progress_logs').select('*').order('id')
+    ])
+
+    if (projectsData && projectsData.length > 0) {
       return {
-        projects: migratedProjects,
-        progressLogs: parsed.progressLogs || defaultProgressLogs,
-        versions: parsed.versions || defaultVersions,
-        demands: migratedDemands
+        projects: fromSnakeCase(projectsData) as Project[],
+        versions: fromSnakeCase(versionsData || []) as Version[],
+        demands: fromSnakeCase(demandsData || []) as Demand[],
+        progressLogs: fromSnakeCase(logsData || []) as ProgressLog[]
       }
     }
   } catch (e) {
-    console.error('Failed to load from storage:', e)
+    console.error('Failed to load from Supabase:', e)
   }
-  return { projects: defaultProjects, progressLogs: defaultProgressLogs, versions: defaultVersions, demands: defaultDemands }
+
+  // 如果 Supabase 为空或失败，使用默认数据并保存到 Supabase
+  await saveAllToSupabase(defaultProjects, defaultProgressLogs, defaultVersions, defaultDemands)
+  
+  return {
+    projects: defaultProjects,
+    progressLogs: defaultProgressLogs,
+    versions: defaultVersions,
+    demands: defaultDemands
+  }
 }
 
-function saveToStorage(projects: Project[], progressLogs: ProgressLog[], versions: Version[], demands: Demand[]) {
+async function saveAllToSupabase(
+  projects: Project[], 
+  progressLogs: ProgressLog[], 
+  versions: Version[], 
+  demands: Demand[]
+) {
   try {
+    await Promise.all([
+      supabase.from('projects').upsert(toSnakeCase(projects)),
+      supabase.from('versions').upsert(toSnakeCase(versions)),
+      supabase.from('demands').upsert(toSnakeCase(demands)),
+      supabase.from('progress_logs').upsert(toSnakeCase(progressLogs))
+    ])
+    
+    // 同时保存到 localStorage 作为备用
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ projects, progressLogs, versions, demands }))
   } catch (e) {
-    console.error('Failed to save to storage:', e)
+    console.error('Failed to save to Supabase:', e)
+    // 降级到 localStorage
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ projects, progressLogs, versions, demands }))
   }
 }
 
@@ -185,11 +234,11 @@ function generateNextVersion(existingVersions: Version[]): string {
 }
 
 export const useProjectStore = defineStore('project', () => {
-  const { projects: loadedProjects, progressLogs: loadedProgressLogs, versions: loadedVersions, demands: loadedDemands } = loadFromStorage()
-  const projects = ref<Project[]>(loadedProjects)
-  const progressLogs = ref<ProgressLog[]>(loadedProgressLogs)
-  const versions = ref<Version[]>(loadedVersions)
-  const demands = ref<Demand[]>(loadedDemands)
+  const projects = ref<Project[]>([])
+  const progressLogs = ref<ProgressLog[]>([])
+  const versions = ref<Version[]>([])
+  const demands = ref<Demand[]>([])
+  const isLoading = ref(true)
   const alerts = ref<Array<{ id: string; projectId: string; message: string; level: string }>>([])
 
   const dimensions = [
@@ -198,6 +247,17 @@ export const useProjectStore = defineStore('project', () => {
     { key: 'marketing', label: '营销', icon: 'YX' },
     { key: 'hr', label: 'HR', icon: 'HR' }
   ]
+
+  // 初始化加载数据
+  async function init() {
+    isLoading.value = true
+    const data = await loadFromSupabase()
+    projects.value = data.projects
+    progressLogs.value = data.progressLogs
+    versions.value = data.versions
+    demands.value = data.demands
+    isLoading.value = false
+  }
 
   // 获取项目的所有版本
   const getVersionsByProject = (projectId: string) => {
@@ -226,44 +286,45 @@ export const useProjectStore = defineStore('project', () => {
   }
 
   // 添加进度日志
-  const addProgressLog = (log: Omit<ProgressLog, 'id'>) => {
+  const addProgressLog = async (log: Omit<ProgressLog, 'id'>) => {
     const newLog: ProgressLog = {
       ...log,
       id: Date.now().toString()
     }
     progressLogs.value.push(newLog)
-    saveToStorage(projects.value, progressLogs.value, versions.value, demands.value)
+    await saveAllToSupabase(projects.value, progressLogs.value, versions.value, demands.value)
     return newLog
   }
 
   // 删除进度日志
-  const deleteProgressLog = (id: string) => {
+  const deleteProgressLog = async (id: string) => {
     progressLogs.value = progressLogs.value.filter(l => l.id !== id)
-    saveToStorage(projects.value, progressLogs.value, versions.value, demands.value)
+    await supabase.from('progress_logs').delete().eq('id', id)
+    await saveAllToSupabase(projects.value, progressLogs.value, versions.value, demands.value)
   }
 
   // 添加版本
-  const addVersion = (version: Omit<Version, 'id'>) => {
+  const addVersion = async (version: Omit<Version, 'id'>) => {
     const newVersion: Version = {
       ...version,
       id: Date.now().toString()
     }
     versions.value.push(newVersion)
-    saveToStorage(projects.value, progressLogs.value, versions.value, demands.value)
+    await saveAllToSupabase(projects.value, progressLogs.value, versions.value, demands.value)
     return newVersion
   }
 
   // 更新版本
-  const updateVersion = (id: string, updates: Partial<Version>) => {
+  const updateVersion = async (id: string, updates: Partial<Version>) => {
     const index = versions.value.findIndex(v => v.id === id)
     if (index > -1) {
       versions.value[index] = { ...versions.value[index], ...updates }
-      saveToStorage(projects.value, progressLogs.value, versions.value, demands.value)
+      await saveAllToSupabase(projects.value, progressLogs.value, versions.value, demands.value)
     }
   }
 
   // 删除版本（解绑关联需求）
-  const deleteVersion = (id: string) => {
+  const deleteVersion = async (id: string) => {
     versions.value = versions.value.filter(v => v.id !== id)
     // 解绑关联的需求
     demands.value.forEach(demand => {
@@ -271,11 +332,12 @@ export const useProjectStore = defineStore('project', () => {
         demand.versionId = null
       }
     })
-    saveToStorage(projects.value, progressLogs.value, versions.value, demands.value)
+    await supabase.from('versions').delete().eq('id', id)
+    await saveAllToSupabase(projects.value, progressLogs.value, versions.value, demands.value)
   }
 
   // 版本状态流转
-  const advanceVersionStatus = (id: string) => {
+  const advanceVersionStatus = async (id: string) => {
     const version = versions.value.find(v => v.id === id)
     if (!version) return
     
@@ -287,7 +349,7 @@ export const useProjectStore = defineStore('project', () => {
     
     const nextStatus = flow[version.status]
     if (nextStatus) {
-      updateVersion(id, { status: nextStatus as Version['status'] })
+      await updateVersion(id, { status: nextStatus as Version['status'] })
       
       // 如果版本发布，自动完成关联需求
       if (nextStatus === 'released') {
@@ -296,7 +358,7 @@ export const useProjectStore = defineStore('project', () => {
             demand.status = 'completed'
           }
         })
-        saveToStorage(projects.value, progressLogs.value, versions.value, demands.value)
+        await saveAllToSupabase(projects.value, progressLogs.value, versions.value, demands.value)
       }
     }
   }
@@ -321,54 +383,56 @@ export const useProjectStore = defineStore('project', () => {
     return computed(() => demands.value.filter(d => d.projectId === projectId))
   }
 
-  const addProject = (project: Omit<Project, 'id'>) => {
+  const addProject = async (project: Omit<Project, 'id'>) => {
     const newProject: Project = {
       ...project,
       id: Date.now().toString()
     }
     projects.value.push(newProject)
-    saveToStorage(projects.value, progressLogs.value, versions.value, demands.value)
+    await saveAllToSupabase(projects.value, progressLogs.value, versions.value, demands.value)
     return newProject
   }
 
-  const updateProject = (id: string, updates: Partial<Project>) => {
+  const updateProject = async (id: string, updates: Partial<Project>) => {
     const index = projects.value.findIndex(p => p.id === id)
     if (index > -1) {
       projects.value[index] = { ...projects.value[index], ...updates }
-      saveToStorage(projects.value, progressLogs.value, versions.value, demands.value)
+      await saveAllToSupabase(projects.value, progressLogs.value, versions.value, demands.value)
     }
   }
 
-  const deleteProject = (id: string) => {
+  const deleteProject = async (id: string) => {
     projects.value = projects.value.filter(p => p.id !== id)
     versions.value = versions.value.filter(v => v.projectId !== id)
     demands.value = demands.value.filter(d => d.projectId !== id)
     progressLogs.value = progressLogs.value.filter(l => l.projectId !== id)
-    saveToStorage(projects.value, progressLogs.value, versions.value, demands.value)
+    await supabase.from('projects').delete().eq('id', id)
+    await saveAllToSupabase(projects.value, progressLogs.value, versions.value, demands.value)
   }
 
-  const addDemand = (demand: Omit<Demand, 'id' | 'status'>) => {
+  const addDemand = async (demand: Omit<Demand, 'id' | 'status'>) => {
     const newDemand: Demand = {
       ...demand,
       id: Date.now().toString(),
       status: 'pending'
     }
     demands.value.push(newDemand)
-    saveToStorage(projects.value, progressLogs.value, versions.value, demands.value)
+    await saveAllToSupabase(projects.value, progressLogs.value, versions.value, demands.value)
     return newDemand
   }
 
-  const updateDemand = (id: string, updates: Partial<Demand>) => {
+  const updateDemand = async (id: string, updates: Partial<Demand>) => {
     const index = demands.value.findIndex(d => d.id === id)
     if (index > -1) {
       demands.value[index] = { ...demands.value[index], ...updates }
-      saveToStorage(projects.value, progressLogs.value, versions.value, demands.value)
+      await saveAllToSupabase(projects.value, progressLogs.value, versions.value, demands.value)
     }
   }
 
-  const deleteDemand = (id: string) => {
+  const deleteDemand = async (id: string) => {
     demands.value = demands.value.filter(d => d.id !== id)
-    saveToStorage(projects.value, progressLogs.value, versions.value, demands.value)
+    await supabase.from('demands').delete().eq('id', id)
+    await saveAllToSupabase(projects.value, progressLogs.value, versions.value, demands.value)
   }
 
   const checkDelays = () => {
@@ -394,14 +458,14 @@ export const useProjectStore = defineStore('project', () => {
     return JSON.stringify({ projects: projects.value, progressLogs: progressLogs.value, versions: versions.value, demands: demands.value }, null, 2)
   }
 
-  const importData = (json: string) => {
+  const importData = async (json: string) => {
     try {
       const data = JSON.parse(json)
       if (data.projects) projects.value = data.projects
       if (data.progressLogs) progressLogs.value = data.progressLogs
       if (data.versions) versions.value = data.versions
       if (data.demands) demands.value = data.demands
-      saveToStorage(projects.value, progressLogs.value, versions.value, demands.value)
+      await saveAllToSupabase(projects.value, progressLogs.value, versions.value, demands.value)
       return true
     } catch (e) {
       return false
@@ -413,8 +477,10 @@ export const useProjectStore = defineStore('project', () => {
     progressLogs,
     versions,
     demands,
+    isLoading,
     alerts,
     dimensions,
+    init,
     getVersionsByProject,
     getDemandCountByVersion,
     getProgressLogsByProject,
