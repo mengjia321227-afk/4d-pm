@@ -121,7 +121,8 @@ const defaultVersions: Version[] = [
 const defaultDemands: Demand[] = [
   { id: '1', title: '增加泰语支持', description: '海外市场需要泰语版本', priority: 'P0', category: '海外平台', creator: '张三', createDate: '2026-01-10', remark: '', images: [], projectId: '1', versionId: '2', scheduleStart: null, scheduleEnd: null, status: 'in_progress' },
   { id: '2', title: '渠道返点系统', description: '为渠道伙伴提供返点计算功能', priority: 'P1', category: '渠道合作伙伴平台', creator: '李四', createDate: '2026-01-12', remark: '', images: [], projectId: '2', versionId: null, scheduleStart: null, scheduleEnd: null, status: 'pending' },
-  { id: '3', title: '员工考勤优化', description: 'EHR系统考勤模块功能增强', priority: 'P1', category: 'EHR', creator: '王五', createDate: '2026-01-15', remark: '', images: [], projectId: '4', versionId: null, scheduleStart: null, scheduleEnd: null, status: 'pending' }
+  { id: '3', title: '员工考勤优化', description: 'EHR系统考勤模块功能增强', priority: 'P1', category: 'EHR', creator: '王五', createDate: '2026-01-15', remark: '', images: [], projectId: '4', versionId: null, scheduleStart: null, scheduleEnd: null, status: 'pending' },
+  { id: '4', title: '客户录入电话栏添加+86国内区号', description: '客户联系人信息录入时，电话字段需要支持+86国内区号。目前有客户在国内但做出海生意的情况，所有电话栏都需要添加+86选项，因为对接到了国内客户转海外的场景。', priority: 'P1', category: '海外平台', creator: '卜佳雯', createDate: '2026-05-21', remark: '截图中显示目前有SG +65、MY +60、TH +66、ID +62、PH +63、VN +84、MM +95、KH +855等区号，但缺少CN +86', images: [], projectId: null, versionId: null, scheduleStart: null, scheduleEnd: null, status: 'pending' }
 ]
 
 function loadFromStorage() {
