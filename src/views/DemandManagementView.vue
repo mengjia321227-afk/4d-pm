@@ -10,9 +10,6 @@
 
     <!-- 筛选工具栏 -->
     <div class="toolbar">
-      <button class="btn-import" @click="showImportModal = true">
-        📋 从钉钉导入
-      </button>
       <input
         v-model="searchQuery"
         type="text"
@@ -95,57 +92,6 @@
       <div v-if="sortedDemands.length === 0" class="empty-state">
         <div class="empty-icon">[空]</div>
         <p>暂无需求</p>
-      </div>
-    </div>
-
-    <!-- 从钉钉导入弹窗 -->
-    <div v-if="showImportModal" class="modal-overlay" @click="showImportModal = false">
-      <div class="modal import-modal" @click.stop>
-        <h2>📋 从钉钉导入需求</h2>
-        <p class="import-tip">复制钉钉群聊消息，粘贴到下方，系统会自动解析</p>
-        
-        <div class="form-group">
-          <textarea 
-            v-model="importText" 
-            placeholder="粘贴钉钉消息内容..."
-            class="import-textarea"
-            rows="8"
-          ></textarea>
-        </div>
-        
-        <div v-if="parsedImport.title" class="import-preview">
-          <h3>解析结果预览</h3>
-          <div class="preview-item">
-            <label>标题：</label>
-            <span>{{ parsedImport.title }}</span>
-          </div>
-          <div class="preview-item">
-            <label>描述：</label>
-            <span class="preview-desc">{{ parsedImport.description || '无' }}</span>
-          </div>
-          <div class="preview-item">
-            <label>优先级：</label>
-            <span class="priority-badge" :class="parsedImport.priority">{{ parsedImport.priority }}</span>
-          </div>
-          <div class="preview-item">
-            <label>提出人：</label>
-            <span>{{ parsedImport.creator || '未知' }}</span>
-          </div>
-        </div>
-        
-        <div class="modal-actions">
-          <button class="btn-secondary" @click="showImportModal = false">取消</button>
-          <button class="btn-primary" @click="parseDingTalkMessage" :disabled="!importText.trim()">
-            智能解析
-          </button>
-          <button 
-            class="btn-primary" 
-            @click="confirmImport" 
-            :disabled="!parsedImport.title"
-          >
-            确认导入
-          </button>
-        </div>
       </div>
     </div>
 
@@ -319,15 +265,6 @@ const filterVersion = ref('')
 const showAddDemand = ref(false)
 const showLinkProject = ref(false)
 const showLinkVersion = ref(false)
-const showImportModal = ref(false)
-const importText = ref('')
-const parsedImport = ref({
-  title: '',
-  description: '',
-  priority: 'P1' as 'P0' | 'P1' | 'P2',
-  creator: '',
-  category: '海外平台'
-})
 const editingDemand = ref<string | null>(null)
 const currentDemand = ref<any>(null)
 const selectedProjectId = ref('')
@@ -510,102 +447,6 @@ const getAvailableVersions = (projectId: string | null) => {
   return store.versions.filter(v => v.projectId === projectId && v.status !== 'released' && v.status !== 'deprecated')
 }
 
-// 解析钉钉消息
-const parseDingTalkMessage = () => {
-  const text = importText.value.trim()
-  if (!text) return
-
-  const lines = text.split('\n').filter(line => line.trim())
-  if (lines.length === 0) return
-
-  // 第一行作为标题（去除 @xxx 等标记）
-  let title = lines[0]
-    .replace(/@\S+/g, '') // 移除 @xxx
-    .replace(/^\s*[【\[]([^】\]]+)[】\]]\s*/, '') // 移除开头 【xxx】
-    .trim()
-
-  // 如果第一行只是@某人，取第二行
-  if (!title && lines.length > 1) {
-    title = lines[1]
-      .replace(/@\S+/g, '')
-      .replace(/^\s*[【\[]([^】\]]+)[】\]]\s*/, '')
-      .trim()
-  }
-
-  // 剩余行作为描述
-  const descriptionLines = lines.slice(title === lines[0].replace(/@\S+/g, '').replace(/^\s*[【\[]([^】\]]+)[】\]]\s*/, '').trim() ? 1 : 2)
-  let description = descriptionLines.join('\n').trim()
-
-  // 提取优先级
-  let priority: 'P0' | 'P1' | 'P2' = 'P1'
-  const priorityMatch = text.match(/优先级[：:]\s*(P[012])/i) || text.match(/\b(P[012])\b/)
-  if (priorityMatch) {
-    priority = priorityMatch[1].toUpperCase() as 'P0' | 'P1' | 'P2'
-  } else if (text.includes('紧急') || text.includes('加急') || text.includes(' ASAP')) {
-    priority = 'P0'
-  } else if (text.includes('重要') || text.includes('高优先级')) {
-    priority = 'P0'
-  }
-
-  // 提取提出人
-  let creator = ''
-  const creatorMatch = text.match(/(?:提出人|提交人|来自|by)[：:]\s*(\S+)/i) || text.match(/@(\S+)/)
-  if (creatorMatch) {
-    creator = creatorMatch[1]
-  }
-
-  // 提取分类（根据关键词）
-  let category = '海外平台'
-  if (text.includes('渠道') || text.includes('合作伙伴')) {
-    category = '渠道合作伙伴平台'
-  } else if (text.includes('EHR') || text.includes('人事') || text.includes('考勤') || text.includes('员工')) {
-    category = 'EHR'
-  } else if (text.includes('海外') || text.includes('国际化') || text.includes('多语言')) {
-    category = '海外平台'
-  }
-
-  parsedImport.value = {
-    title: title || '未命名需求',
-    description,
-    priority,
-    creator,
-    category
-  }
-}
-
-// 确认导入
-const confirmImport = () => {
-  if (!parsedImport.value.title) return
-
-  store.addDemand({
-    title: parsedImport.value.title,
-    description: parsedImport.value.description,
-    priority: parsedImport.value.priority,
-    category: parsedImport.value.category,
-    creator: parsedImport.value.creator || '钉钉导入',
-    createDate: new Date().toISOString().split('T')[0],
-    remark: '',
-    images: [],
-    projectId: null,
-    versionId: null,
-    scheduleStart: null,
-    scheduleEnd: null
-  })
-
-  // 重置
-  importText.value = ''
-  parsedImport.value = {
-    title: '',
-    description: '',
-    priority: 'P1',
-    creator: '',
-    category: '海外平台'
-  }
-  showImportModal.value = false
-
-  alert('需求已成功导入！')
-}
-
 const editDemand = (demand: any) => {
   editingDemand.value = demand.id
   demandForm.value = {
@@ -727,22 +568,6 @@ const confirmLinkVersion = () => {
   border-radius: 8px;
   cursor: pointer;
   font-size: 14px;
-}
-
-.btn-import {
-  padding: 10px 20px;
-  background: #52c41a;
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  transition: all 0.2s;
-}
-
-.btn-import:hover {
-  background: #389e0d;
 }
 
 .toolbar {
@@ -1131,74 +956,6 @@ const confirmLinkVersion = () => {
   font-size: 12px;
   color: #8c8c8c;
   margin-top: 4px;
-}
-
-/* 钉钉导入样式 */
-.import-modal {
-  max-width: 600px !important;
-}
-
-.import-tip {
-  color: #666;
-  font-size: 14px;
-  margin-bottom: 16px;
-  background: #f6ffed;
-  padding: 10px 14px;
-  border-radius: 6px;
-  border: 1px solid #b7eb8f;
-}
-
-.import-textarea {
-  width: 100%;
-  padding: 12px;
-  border: 2px dashed #d9d9d9;
-  border-radius: 8px;
-  font-size: 14px;
-  resize: vertical;
-  min-height: 120px;
-  transition: border-color 0.2s;
-  font-family: inherit;
-}
-
-.import-textarea:focus {
-  outline: none;
-  border-color: #52c41a;
-  border-style: solid;
-}
-
-.import-preview {
-  background: #f6ffed;
-  border: 1px solid #b7eb8f;
-  border-radius: 8px;
-  padding: 16px;
-  margin: 16px 0;
-}
-
-.import-preview h3 {
-  margin-bottom: 12px;
-  font-size: 16px;
-  color: #389e0d;
-}
-
-.preview-item {
-  display: flex;
-  align-items: flex-start;
-  margin-bottom: 8px;
-  font-size: 14px;
-}
-
-.preview-item label {
-  font-weight: 500;
-  color: #666;
-  min-width: 70px;
-  margin-right: 8px;
-}
-
-.preview-desc {
-  color: #333;
-  word-break: break-all;
-  white-space: pre-wrap;
-  line-height: 1.5;
 }
 
 .modal-actions .btn-primary:disabled {
