@@ -198,12 +198,11 @@ async function saveAllToSupabase(
   demands: Demand[]
 ) {
   try {
-    await Promise.all([
-      supabase.from('projects').upsert(toSnakeCase(projects)),
-      supabase.from('versions').upsert(toSnakeCase(versions)),
-      supabase.from('demands').upsert(toSnakeCase(demands)),
-      supabase.from('progress_logs').upsert(toSnakeCase(progressLogs))
-    ])
+    // 按顺序写入：先写没有外键依赖的表
+    await supabase.from('projects').upsert(toSnakeCase(projects))
+    await supabase.from('versions').upsert(toSnakeCase(versions))
+    await supabase.from('demands').upsert(toSnakeCase(demands))
+    await supabase.from('progress_logs').upsert(toSnakeCase(progressLogs))
     
     // 同时保存到 localStorage 作为备用
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ projects, progressLogs, versions, demands }))
