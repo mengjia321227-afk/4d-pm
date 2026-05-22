@@ -199,10 +199,17 @@ async function saveAllToSupabase(
 ) {
   try {
     // 按顺序写入：先写没有外键依赖的表
-    await supabase.from('projects').upsert(toSnakeCase(projects))
-    await supabase.from('versions').upsert(toSnakeCase(versions))
-    await supabase.from('demands').upsert(toSnakeCase(demands))
-    await supabase.from('progress_logs').upsert(toSnakeCase(progressLogs))
+    const { error: pErr } = await supabase.from('projects').upsert(toSnakeCase(projects))
+    if (pErr) console.error('Projects save error:', pErr)
+    
+    const { error: vErr } = await supabase.from('versions').upsert(toSnakeCase(versions))
+    if (vErr) console.error('Versions save error:', vErr)
+    
+    const { error: dErr } = await supabase.from('demands').upsert(toSnakeCase(demands))
+    if (dErr) console.error('Demands save error:', dErr)
+    
+    const { error: lErr } = await supabase.from('progress_logs').upsert(toSnakeCase(progressLogs))
+    if (lErr) console.error('Progress logs save error:', lErr)
     
     // 同时保存到 localStorage 作为备用
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ projects, progressLogs, versions, demands }))
